@@ -8,6 +8,21 @@ from pathlib import Path
 from typing import Dict, Iterable, List
 
 
+# Mapping of common token mint addresses to human-readable symbols.
+ASSET_SYMBOLS: Dict[str, str] = {
+    # Stablecoins
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+    # Wrapped SOL
+    "So11111111111111111111111111111111111111112": "wSOL",
+    # Meme tokens
+    "69LjZUUzxj3Cb3Fxeo1X4QpYEQTboApkhXTysPpbpump": "CODEC",
+    "AxGAbdFtdbj2oNXa4dKqFvwHzgFtW9mFHWmd7vQfpump": "HAT",
+    "28a2oQVCPrJB7SLZo4DVMVdHchSXiG8sZy31DohPpump": "PRINT",
+    "4q3Z58YxrZEAVMLtMwnm7eHtodSD3LSpSNt3pDnqpump": "KOLIN",
+}
+
+
 MIN_NATIVE_TRANSFER_LAMPORTS = 5_000  # 0.000005 SOL – filters rent/technical dust
 getcontext().prec = 28
 
@@ -117,6 +132,7 @@ def iter_rows(address: str, tx: dict) -> Iterable[dict]:
 
     rows: List[dict] = []
     for asset, values in changes.items():
+        asset_label = ASSET_SYMBOLS.get(asset, asset)
         amount_in = values["in"]
         amount_out = values["out"]
 
@@ -132,7 +148,7 @@ def iter_rows(address: str, tx: dict) -> Iterable[dict]:
             {
                 "Date": date,
                 "Transaction Hash": signature,
-                "Asset": asset,
+                "Asset": asset_label,
                 "Amount_IN": format_decimal(amount_in, 9),
                 "Amount_OUT": format_decimal(amount_out, 9),
                 "Fee (SOL)": format_decimal(fee_sol, 9),
