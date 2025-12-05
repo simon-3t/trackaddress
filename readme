@@ -9,7 +9,10 @@ Extract transaction from the Solana blockchain.
    python solscan_fetch.py --input solana.csv --output transactions.json --limit 50
    ```
 
-   Use `--limit` to control how many transactions to request per address and `--delay` to throttle requests.
+   The fetcher now uses `getSignaturesForAddress` pagination to gather every signature before requesting the
+   corresponding transactions via `/v0/transactions`, retrying missing entries if the history endpoint times out.
+   Use `--limit` to control the page size (Helius allows up to 100), `--delay` to throttle requests/retries, and
+   `--max` to optionally cap how many transactions to collect per address.
 
 3. To use your own Helius API key or a different API URL, set environment variables:
 

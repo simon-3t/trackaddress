@@ -3,7 +3,7 @@ import csv
 import json
 import os
 import time
-from typing import Dict, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -36,19 +36,123 @@ def dedupe_preserve_order(items: Sequence[str]) -> List[str]:
     return ordered
 
 
-def fetch_transactions(address: str, api_url: str, api_key: str, limit: int) -> Dict:
-    query = urlencode({"limit": limit})
-    endpoint = (
-        f"{api_url.rstrip('/')}/v0/addresses/{address}/transactions/?api-key={api_key}&{query}"
-    )
-    request = Request(url=endpoint)
+def fetch_signatures(
+    address: str,
+    api_url: str,
+    api_key: str,
+    limit: int,
+    before: Optional[str] = None,
+) -> Tuple[List[str], Optional[str]]:
+    query_params = {"api-key": api_key}
+    if before:
+        query_params["before"] = before
+
+    endpoint = f"{api_url.rstrip('/')}?{urlencode(query_params)}"
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": "signatures",
+            "method": "getSignaturesForAddress",
+            "params": [address, {"limit": limit, "before": before}],
+        }
+    ).encode("utf-8")
+
+    request = Request(url=endpoint, data=body, headers={"Content-Type": "application/json"})
 
     with urlopen(request, timeout=30) as response:  # nosec: B310
         payload = json.load(response)
 
-    if isinstance(payload, dict) and payload.get("success") is False:
-        raise RuntimeError(f"Helius error for {address}: {payload}")
-    return payload
+    result = payload.get("result") if isinstance(payload, dict) else None
+    if result is None or not isinstance(result, list):
+        raise RuntimeError(f"Unexpected signatures payload for {address}: {payload}")
+
+    signatures = [entry.get("signature") for entry in result if isinstance(entry, dict)]
+    signatures = [sig for sig in signatures if sig]
+    next_before = signatures[-1] if len(result) == limit and signatures else None
+    return signatures, next_before
+
+
+def fetch_transactions_for_signatures(
+    api_url: str, api_key: str, signatures: Iterable[str]
+) -> List[Dict]:
+    payload = json.dumps({"transactions": list(signatures)}).encode("utf-8")
+    endpoint = f"{api_url.rstrip('/')}/v0/transactions/?api-key={api_key}"
+    request = Request(
+        url=endpoint, data=payload, headers={"Content-Type": "application/json"}
+    )
+
+    with urlopen(request, timeout=30) as response:  # nosec: B310
+        tx_payload = json.load(response)
+
+    if isinstance(tx_payload, dict) and tx_payload.get("success") is False:
+        raise RuntimeError(f"Helius transaction error: {tx_payload}")
+    if not isinstance(tx_payload, list):
+        raise RuntimeError(f"Unexpected transactions payload: {tx_payload}")
+    return tx_payload
+
+
+def fetch_transactions_with_retries(
+    api_url: str,
+    api_key: str,
+    signatures: List[str],
+    delay: float,
+    max_attempts: int = 3,
+) -> List[Dict]:
+    remaining = list(signatures)
+    collected: List[Dict] = []
+
+    for attempt in range(1, max_attempts + 1):
+        if not remaining:
+            break
+
+        page = fetch_transactions_for_signatures(api_url, api_key, remaining)
+        collected.extend(page)
+
+        returned_signatures = {
+            tx.get("signature") for tx in page if isinstance(tx, dict) and tx.get("signature")
+        }
+        remaining = [sig for sig in remaining if sig not in returned_signatures]
+
+        if remaining and attempt < max_attempts:
+            time.sleep(delay)
+
+    if remaining:
+        print(
+            f"Warning: {len(remaining)} transaction(s) were missing after retries: {', '.join(remaining)}"
+        )
+
+    return collected
+
+
+def fetch_all_transactions(
+    address: str,
+    api_url: str,
+    api_key: str,
+    limit: int,
+    delay: float,
+    max_transactions: Optional[int] = None,
+) -> List[Dict]:
+    all_transactions: List[Dict] = []
+    before: Optional[str] = None
+
+    while True:
+        signatures, before = fetch_signatures(address, api_url, api_key, limit, before=before)
+
+        if not signatures:
+            break
+
+        transactions = fetch_transactions_with_retries(api_url, api_key, signatures, delay)
+        all_transactions.extend(transactions)
+
+        if max_transactions is not None and len(all_transactions) >= max_transactions:
+            return all_transactions[:max_transactions]
+
+        if len(signatures) < limit or before is None:
+            break
+
+        time.sleep(delay)
+
+    return all_transactions
 
 
 def write_results(output_path: str, results: Dict[str, Dict]) -> None:
@@ -75,7 +179,7 @@ def parse_args() -> argparse.Namespace:
         "--limit",
         type=int,
         default=50,
-        help="Number of transactions to request per address.",
+        help="Page size for each API request (Helius max is typically 100).",
     )
     parser.add_argument(
         "--api-url",
@@ -93,6 +197,12 @@ def parse_args() -> argparse.Namespace:
         default=0.5,
         help="Delay between API requests in seconds to avoid rate limits.",
     )
+    parser.add_argument(
+        "--max",
+        type=int,
+        default=None,
+        help="Maximum number of transactions to fetch per address (default: fetch all).",
+    )
     return parser.parse_args()
 
 
@@ -107,7 +217,14 @@ def main() -> None:
     for index, address in enumerate(addresses, start=1):
         print(f"[{index}/{len(addresses)}] Fetching transactions for {address}...")
         try:
-            payload = fetch_transactions(address, args.api_url, args.api_key, args.limit)
+            payload = fetch_all_transactions(
+                address,
+                args.api_url,
+                args.api_key,
+                args.limit,
+                args.delay,
+                max_transactions=args.max,
+            )
         except HTTPError as exc:
             print(f"HTTP error for {address}: {exc}")
             continue
@@ -116,7 +233,6 @@ def main() -> None:
             continue
 
         results[address] = payload
-        time.sleep(args.delay)
 
     write_results(args.output, results)
     print(f"Wrote transactions for {len(results)} address(es) to {args.output}")
