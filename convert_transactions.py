@@ -148,6 +148,7 @@ def iter_rows(address: str, tx: dict) -> Iterable[dict]:
             {
                 "Date": date,
                 "Transaction Hash": signature,
+                "Address": address,
                 "Asset": asset_label,
                 "Amount_IN": format_decimal(amount_in, 9),
                 "Amount_OUT": format_decimal(amount_out, 9),
@@ -162,6 +163,7 @@ def write_csv(rows: Iterable[dict], output: Path) -> None:
     fieldnames = [
         "Date",
         "Transaction Hash",
+        "Address",
         "Asset",
         "Amount_IN",
         "Amount_OUT",
