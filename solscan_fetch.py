@@ -9,13 +9,9 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-# The Pro API server already versions endpoints, so do not append "/v2" here.
-DEFAULT_SOLSCAN_URL = "https://pro-api.solscan.io"
-DEFAULT_TOKEN = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJjcmVhdGVkQXQiOjE3NjQ4Mjk3NjcwNTgsImVtYWlsIjoic2ltb25AbW9vbi10ZWNoLmlvIiwiYWN0aW9uIjoidG9rZW4tYXBpIiwiYXBpVmVyc2lvbiI6InYyIiwiaWF0IjoxNzY0ODI5NzY3fQ."
-    "o10JBOmET1slzoyBwySAoju7B5QNcSPFRDX-eLwvrlQ"
-)
+# Helius mainnet endpoint; include your API key in the query string.
+DEFAULT_HELIUS_URL = "https://api-mainnet.helius-rpc.com"
+DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
 def read_addresses(path: str) -> List[str]:
@@ -40,19 +36,18 @@ def dedupe_preserve_order(items: Sequence[str]) -> List[str]:
     return ordered
 
 
-def fetch_transactions(address: str, api_url: str, token: str, limit: int) -> Dict:
-    query = urlencode({"address": address, "limit": limit})
-    endpoint = f"{api_url.rstrip('/')}/v2/account/transactions?{query}"
-    request = Request(
-        url=endpoint,
-        headers={"token": token},
+def fetch_transactions(address: str, api_url: str, api_key: str, limit: int) -> Dict:
+    query = urlencode({"limit": limit})
+    endpoint = (
+        f"{api_url.rstrip('/')}/v0/addresses/{address}/transactions/?api-key={api_key}&{query}"
     )
+    request = Request(url=endpoint)
 
     with urlopen(request, timeout=30) as response:  # nosec: B310
         payload = json.load(response)
 
     if isinstance(payload, dict) and payload.get("success") is False:
-        raise RuntimeError(f"Solscan error for {address}: {payload}")
+        raise RuntimeError(f"Helius error for {address}: {payload}")
     return payload
 
 
@@ -63,7 +58,7 @@ def write_results(output_path: str, results: Dict[str, Dict]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch Solana transactions for addresses using Solscan API.",
+        description="Fetch Solana transactions for addresses using the Helius API.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -84,13 +79,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-url",
-        default=os.environ.get("SOLSCAN_API_URL", DEFAULT_SOLSCAN_URL),
-        help="Base Solscan API URL to use.",
+        default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_URL),
+        help="Base Helius API URL to use.",
     )
     parser.add_argument(
-        "--token",
-        default=os.environ.get("SOLSCAN_API_KEY", DEFAULT_TOKEN),
-        help="Solscan API token.",
+        "--api-key",
+        default=os.environ.get("HELIUS_API_KEY", DEFAULT_API_KEY),
+        help="Helius API key.",
     )
     parser.add_argument(
         "--delay",
@@ -112,7 +107,7 @@ def main() -> None:
     for index, address in enumerate(addresses, start=1):
         print(f"[{index}/{len(addresses)}] Fetching transactions for {address}...")
         try:
-            payload = fetch_transactions(address, args.api_url, args.token, args.limit)
+            payload = fetch_transactions(address, args.api_url, args.api_key, args.limit)
         except HTTPError as exc:
             print(f"HTTP error for {address}: {exc}")
             continue
