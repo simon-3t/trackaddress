@@ -12,9 +12,12 @@ from urllib.request import Request, urlopen
 # Helius mainnet endpoint for JSON-RPC requests; include your API key in the query string.
 DEFAULT_HELIUS_RPC_URL = "https://api-mainnet.helius-rpc.com"
 # Helius REST endpoint for enhanced transaction lookups. The REST host defaults
-# to the public API domain; override via environment variables or CLI flags if
-# you run a private instance or want to force the RPC host instead.
-DEFAULT_HELIUS_REST_URL = "https://api.helius.xyz"
+# to the mainnet RPC domain (which also serves REST routes like /v0/transactions
+# and /v0/addresses) to mirror the documented examples and avoid HTTP 404s when
+# users point at api-mainnet.helius-rpc.com. A secondary public REST domain is
+# used as a fallback when the primary host returns a 404.
+DEFAULT_HELIUS_REST_URL = DEFAULT_HELIUS_RPC_URL
+FALLBACK_HELIUS_REST_URL = "https://api.helius.xyz"
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
@@ -214,7 +217,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rest-api-url",
         default=rest_default,
-        help=("Helius REST URL used for transaction lookups (defaults to api.helius.xyz)."),
+        help=(
+            "Helius REST URL used for transaction lookups (defaults to the RPC host); "
+            "the script will retry with api.helius.xyz if the primary host returns 404."
+        ),
     )
     parser.add_argument(
         "--api-key",
@@ -260,8 +266,11 @@ def main() -> None:
                 max_transactions=args.max,
             )
         except HTTPError as exc:
-            if exc.code == 404 and strip_query(rest_url) != strip_query(DEFAULT_HELIUS_REST_URL):
-                fallback = DEFAULT_HELIUS_REST_URL
+            if (
+                exc.code == 404
+                and strip_query(rest_url) != strip_query(FALLBACK_HELIUS_REST_URL)
+            ):
+                fallback = FALLBACK_HELIUS_REST_URL
                 print(
                     f"HTTP 404 for {address} using {rest_url}; retrying with {fallback} ..."
                 )
