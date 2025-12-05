@@ -11,8 +11,11 @@ from urllib.request import Request, urlopen
 
 # Helius mainnet endpoint for JSON-RPC requests; include your API key in the query string.
 DEFAULT_HELIUS_RPC_URL = "https://api-mainnet.helius-rpc.com"
-# Helius REST endpoint for enhanced transaction lookups.
-DEFAULT_HELIUS_REST_URL = "https://api.helius.xyz"
+# Helius REST endpoint for enhanced transaction lookups. The REST and RPC hosts
+# should match; using different hosts can return 404s for the `/v0/transactions`
+# route, so we default to the RPC host unless the user opts in to something
+# else via environment variables or CLI flags.
+DEFAULT_HELIUS_REST_URL = DEFAULT_HELIUS_RPC_URL
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
@@ -195,10 +198,17 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_RPC_URL),
         help="Helius RPC URL used for getSignaturesForAddress.",
     )
+    rest_default = (
+        os.environ.get("HELIUS_REST_API_URL")
+        or os.environ.get("HELIUS_API_URL")
+        or DEFAULT_HELIUS_REST_URL
+    )
     parser.add_argument(
         "--rest-api-url",
-        default=os.environ.get("HELIUS_REST_API_URL", DEFAULT_HELIUS_REST_URL),
-        help="Helius REST URL used for transaction lookups.",
+        default=rest_default,
+        help=(
+            "Helius REST URL used for transaction lookups (defaults to the RPC host to avoid 404s)."
+        ),
     )
     parser.add_argument(
         "--api-key",

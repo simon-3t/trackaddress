@@ -20,6 +20,8 @@ Extract transaction from the Solana blockchain.
    HELIUS_API_KEY="<your-api-key>" HELIUS_API_URL="https://api-mainnet.helius-rpc.com" python solscan_fetch.py
    ```
 
+   The REST transactions endpoint uses the same host as the RPC URL by default to avoid 404s from mismatched domains; override `HELIUS_REST_API_URL` if you need a different host.
+
 Results are written to `transactions.json` as a JSON object keyed by address.
 
 ### Converting to CSV for auditing
