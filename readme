@@ -18,3 +18,13 @@ Extract transaction from the Solana blockchain.
    ```
 
 Results are written to `transactions.json` as a JSON object keyed by address.
+
+### Converting to CSV for auditing
+
+Use `convert_transactions.py` to flatten the JSON output into a CSV that lists one row per transfer (native SOL or SPL token).
+
+```bash
+python convert_transactions.py --input example-transactions.json --output transactions.csv
+```
+
+Columns include the source address, signature, slot, timestamp (ISO-8601), fee payer, transfer type, mint, amount, and the sender/recipient accounts to simplify accountability reporting.
