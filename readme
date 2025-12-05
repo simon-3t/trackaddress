@@ -1,1 +1,20 @@
 Extract transaction from the Solana blockchain.
+
+## Usage
+
+1. Ensure Python 3.11+ is available (the script uses only the standard library).
+2. Run the fetcher against the provided address list:
+
+   ```bash
+   python solscan_fetch.py --input solana.csv --output transactions.json --limit 50
+   ```
+
+   Use `--limit` to control how many transactions to request per address and `--delay` to throttle requests.
+
+3. To use your own Solscan token or a different API URL, set environment variables:
+
+   ```bash
+   SOLSCAN_API_KEY="<your-token>" SOLSCAN_API_URL="https://pro-api.solscan.io/v2" python solscan_fetch.py
+   ```
+
+Results are written to `transactions.json` as a JSON object keyed by address.
