@@ -9,7 +9,8 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DEFAULT_SOLSCAN_URL = "https://pro-api.solscan.io/v2"
+# The Pro API server already versions endpoints, so do not append "/v2" here.
+DEFAULT_SOLSCAN_URL = "https://pro-api.solscan.io"
 DEFAULT_TOKEN = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
     "eyJjcmVhdGVkQXQiOjE3NjQ4Mjk3NjcwNTgsImVtYWlsIjoic2ltb25AbW9vbi10ZWNoLmlvIiwiYWN0aW9uIjoidG9rZW4tYXBpIiwiYXBpVmVyc2lvbiI6InYyIiwiaWF0IjoxNzY0ODI5NzY3fQ."
@@ -41,8 +42,9 @@ def dedupe_preserve_order(items: Sequence[str]) -> List[str]:
 
 def fetch_transactions(address: str, api_url: str, token: str, limit: int) -> Dict:
     query = urlencode({"address": address, "limit": limit})
+    endpoint = f"{api_url.rstrip('/')}/v2/account/transactions?{query}"
     request = Request(
-        url=f"{api_url}/account/transactions?{query}",
+        url=endpoint,
         headers={"token": token},
     )
 
