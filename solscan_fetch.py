@@ -78,10 +78,7 @@ def fetch_transactions_for_signatures(
     rest_url: str, api_key: str, signatures: Iterable[str]
 ) -> List[Dict]:
     payload = json.dumps({"transactions": list(signatures)}).encode("utf-8")
-    # Avoid a trailing slash before the query string because the Helius API
-    # treats `/v0/transactions` and `/v0/transactions/` as distinct paths and
-    # the latter returns 404.
-    endpoint = f"{rest_url.rstrip('/')}/v0/transactions?api-key={api_key}"
+    endpoint = f"{rest_url.rstrip('/')}/v0/transactions/?api-key={api_key}"
     request = Request(
         url=endpoint, data=payload, headers={"Content-Type": "application/json"}
     )
