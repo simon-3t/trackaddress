@@ -11,11 +11,10 @@ from urllib.request import Request, urlopen
 
 # Helius mainnet endpoint for JSON-RPC requests; include your API key in the query string.
 DEFAULT_HELIUS_RPC_URL = "https://api-mainnet.helius-rpc.com"
-# Helius REST endpoint for enhanced transaction lookups. The REST and RPC hosts
-# should match; using different hosts can return 404s for the `/v0/transactions`
-# route, so we default to the RPC host unless the user opts in to something
-# else via environment variables or CLI flags.
-DEFAULT_HELIUS_REST_URL = DEFAULT_HELIUS_RPC_URL
+# Helius REST endpoint for enhanced transaction lookups. The REST host defaults
+# to the public API domain; override via environment variables or CLI flags if
+# you run a private instance or want to force the RPC host instead.
+DEFAULT_HELIUS_REST_URL = "https://api.helius.xyz"
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
@@ -211,17 +210,11 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_RPC_URL),
         help="Helius RPC URL used for getSignaturesForAddress.",
     )
-    rest_default = (
-        os.environ.get("HELIUS_REST_API_URL")
-        or os.environ.get("HELIUS_API_URL")
-        or DEFAULT_HELIUS_REST_URL
-    )
+    rest_default = os.environ.get("HELIUS_REST_API_URL") or DEFAULT_HELIUS_REST_URL
     parser.add_argument(
         "--rest-api-url",
         default=rest_default,
-        help=(
-            "Helius REST URL used for transaction lookups (defaults to the RPC host to avoid 404s)."
-        ),
+        help=("Helius REST URL used for transaction lookups (defaults to api.helius.xyz)."),
     )
     parser.add_argument(
         "--api-key",
@@ -267,8 +260,27 @@ def main() -> None:
                 max_transactions=args.max,
             )
         except HTTPError as exc:
-            print(f"HTTP error for {address}: {exc}")
-            continue
+            if exc.code == 404 and strip_query(rest_url) != strip_query(DEFAULT_HELIUS_REST_URL):
+                fallback = DEFAULT_HELIUS_REST_URL
+                print(
+                    f"HTTP 404 for {address} using {rest_url}; retrying with {fallback} ..."
+                )
+                try:
+                    payload = fetch_all_transactions(
+                        address,
+                        rpc_url,
+                        fallback,
+                        args.api_key,
+                        args.limit,
+                        args.delay,
+                        max_transactions=args.max,
+                    )
+                except HTTPError as retry_exc:
+                    print(f"HTTP error for {address} after fallback: {retry_exc}")
+                    continue
+            else:
+                print(f"HTTP error for {address}: {exc}")
+                continue
         except Exception as exc:  # noqa: BLE001
             print(f"Error for {address}: {exc}")
             continue

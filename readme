@@ -14,15 +14,14 @@ Extract transaction from the Solana blockchain.
    Use `--limit` to control the page size (Helius allows up to 100), `--delay` to throttle requests/retries, and
    `--max` to optionally cap how many transactions to collect per address.
 
-3. To use your own Helius API key or a different API URL, set environment variables:
+3. To use your own Helius API key or different API URLs, set environment variables:
 
    ```bash
-   HELIUS_API_KEY="<your-api-key>" HELIUS_API_URL="https://api-mainnet.helius-rpc.com" python solscan_fetch.py
+   HELIUS_API_KEY="<your-api-key>" HELIUS_API_URL="https://api-mainnet.helius-rpc.com" \
+   HELIUS_REST_API_URL="https://api.helius.xyz" python solscan_fetch.py
    ```
 
-   The REST transactions endpoint uses the same host as the RPC URL by default to avoid 404s from mismatched domains; override `HELIUS_REST_API_URL` if you need a different host.
-
-   Tip: pass only the host for `HELIUS_API_URL`/`HELIUS_REST_API_URL` (no `?api-key=` query string). The script appends the API key automatically and strips any accidental query parameters to avoid malformed URLs that can trigger 404s.
+   The REST transactions endpoint defaults to `https://api.helius.xyz`, which serves the `/v0/transactions` route; override `HELIUS_REST_API_URL` if you need a different host (e.g., a private instance). Tip: pass only the host for `HELIUS_API_URL`/`HELIUS_REST_API_URL` (no `?api-key=` query string). The script appends the API key automatically and strips any accidental query parameters to avoid malformed URLs that can trigger 404s.
 
 Results are written to `transactions.json` as a JSON object keyed by address.
 
