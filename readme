@@ -11,10 +11,10 @@ Extract transaction from the Solana blockchain.
 
    Use `--limit` to control how many transactions to request per address and `--delay` to throttle requests.
 
-3. To use your own Solscan token or a different API URL, set environment variables:
+3. To use your own Helius API key or a different API URL, set environment variables:
 
    ```bash
-   SOLSCAN_API_KEY="<your-token>" SOLSCAN_API_URL="https://pro-api.solscan.io" python solscan_fetch.py
+   HELIUS_API_KEY="<your-api-key>" HELIUS_API_URL="https://api-mainnet.helius-rpc.com" python solscan_fetch.py
    ```
 
 Results are written to `transactions.json` as a JSON object keyed by address.
