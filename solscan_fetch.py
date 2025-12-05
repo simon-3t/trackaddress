@@ -11,9 +11,24 @@ from urllib.request import Request, urlopen
 
 # Helius mainnet endpoint for JSON-RPC requests; include your API key in the query string.
 DEFAULT_HELIUS_RPC_URL = "https://api-mainnet.helius-rpc.com"
-# Helius REST endpoint for enhanced transaction lookups.
+# Helius REST endpoint for enhanced transaction lookups. The REST host defaults
+# to the public API domain; override via environment variables or CLI flags if
+# you run a private instance or want to force the RPC host instead.
 DEFAULT_HELIUS_REST_URL = "https://api.helius.xyz"
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
+
+
+def strip_query(base_url: str) -> str:
+    """Remove any query string or trailing slash from a base URL.
+
+    Users sometimes export HELIUS_API_URL with an embedded ``?api-key=``
+    query parameter. When the script then appends its own query string,
+    the combined URL can become malformed (e.g. ``...?api-key=.../v0``),
+    which Helius responds to with HTTP 404. We defensively strip the
+    query to keep the host clean before building endpoints.
+    """
+
+    return base_url.split("?", 1)[0].rstrip("/")
 
 
 def read_addresses(path: str) -> List[str]:
@@ -195,10 +210,11 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_RPC_URL),
         help="Helius RPC URL used for getSignaturesForAddress.",
     )
+    rest_default = os.environ.get("HELIUS_REST_API_URL") or DEFAULT_HELIUS_REST_URL
     parser.add_argument(
         "--rest-api-url",
-        default=os.environ.get("HELIUS_REST_API_URL", DEFAULT_HELIUS_REST_URL),
-        help="Helius REST URL used for transaction lookups.",
+        default=rest_default,
+        help=("Helius REST URL used for transaction lookups (defaults to api.helius.xyz)."),
     )
     parser.add_argument(
         "--api-key",
@@ -223,6 +239,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    rpc_url = strip_query(args.api_url)
+    rest_url = strip_query(args.rest_api_url)
+
     addresses = dedupe_preserve_order(read_addresses(args.input))
     if not addresses:
         raise SystemExit("No addresses found in input file.")
@@ -233,16 +252,35 @@ def main() -> None:
         try:
             payload = fetch_all_transactions(
                 address,
-                args.api_url,
-                args.rest_api_url,
+                rpc_url,
+                rest_url,
                 args.api_key,
                 args.limit,
                 args.delay,
                 max_transactions=args.max,
             )
         except HTTPError as exc:
-            print(f"HTTP error for {address}: {exc}")
-            continue
+            if exc.code == 404 and strip_query(rest_url) != strip_query(DEFAULT_HELIUS_REST_URL):
+                fallback = DEFAULT_HELIUS_REST_URL
+                print(
+                    f"HTTP 404 for {address} using {rest_url}; retrying with {fallback} ..."
+                )
+                try:
+                    payload = fetch_all_transactions(
+                        address,
+                        rpc_url,
+                        fallback,
+                        args.api_key,
+                        args.limit,
+                        args.delay,
+                        max_transactions=args.max,
+                    )
+                except HTTPError as retry_exc:
+                    print(f"HTTP error for {address} after fallback: {retry_exc}")
+                    continue
+            else:
+                print(f"HTTP error for {address}: {exc}")
+                continue
         except Exception as exc:  # noqa: BLE001
             print(f"Error for {address}: {exc}")
             continue
