@@ -19,6 +19,19 @@ DEFAULT_HELIUS_REST_URL = DEFAULT_HELIUS_RPC_URL
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
+def strip_query(base_url: str) -> str:
+    """Remove any query string or trailing slash from a base URL.
+
+    Users sometimes export HELIUS_API_URL with an embedded ``?api-key=``
+    query parameter. When the script then appends its own query string,
+    the combined URL can become malformed (e.g. ``...?api-key=.../v0``),
+    which Helius responds to with HTTP 404. We defensively strip the
+    query to keep the host clean before building endpoints.
+    """
+
+    return base_url.split("?", 1)[0].rstrip("/")
+
+
 def read_addresses(path: str) -> List[str]:
     addresses: List[str] = []
     with open(path, newline="") as csvfile:
@@ -233,6 +246,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    rpc_url = strip_query(args.api_url)
+    rest_url = strip_query(args.rest_api_url)
+
     addresses = dedupe_preserve_order(read_addresses(args.input))
     if not addresses:
         raise SystemExit("No addresses found in input file.")
@@ -243,8 +259,8 @@ def main() -> None:
         try:
             payload = fetch_all_transactions(
                 address,
-                args.api_url,
-                args.rest_api_url,
+                rpc_url,
+                rest_url,
                 args.api_key,
                 args.limit,
                 args.delay,
