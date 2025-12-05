@@ -9,8 +9,10 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-# Helius mainnet endpoint; include your API key in the query string.
-DEFAULT_HELIUS_URL = "https://api-mainnet.helius-rpc.com"
+# Helius mainnet endpoint for JSON-RPC requests; include your API key in the query string.
+DEFAULT_HELIUS_RPC_URL = "https://api-mainnet.helius-rpc.com"
+# Helius REST endpoint for enhanced transaction lookups.
+DEFAULT_HELIUS_REST_URL = "https://api.helius.xyz"
 DEFAULT_API_KEY = "dd1e72eb-f7c4-4914-844d-a0e1b8c15a10"
 
 
@@ -38,7 +40,7 @@ def dedupe_preserve_order(items: Sequence[str]) -> List[str]:
 
 def fetch_signatures(
     address: str,
-    api_url: str,
+    rpc_url: str,
     api_key: str,
     limit: int,
     before: Optional[str] = None,
@@ -47,7 +49,7 @@ def fetch_signatures(
     if before:
         query_params["before"] = before
 
-    endpoint = f"{api_url.rstrip('/')}?{urlencode(query_params)}"
+    endpoint = f"{rpc_url.rstrip('/')}?{urlencode(query_params)}"
     body = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -73,10 +75,10 @@ def fetch_signatures(
 
 
 def fetch_transactions_for_signatures(
-    api_url: str, api_key: str, signatures: Iterable[str]
+    rest_url: str, api_key: str, signatures: Iterable[str]
 ) -> List[Dict]:
     payload = json.dumps({"transactions": list(signatures)}).encode("utf-8")
-    endpoint = f"{api_url.rstrip('/')}/v0/transactions/?api-key={api_key}"
+    endpoint = f"{rest_url.rstrip('/')}/v0/transactions/?api-key={api_key}"
     request = Request(
         url=endpoint, data=payload, headers={"Content-Type": "application/json"}
     )
@@ -92,7 +94,7 @@ def fetch_transactions_for_signatures(
 
 
 def fetch_transactions_with_retries(
-    api_url: str,
+    rest_url: str,
     api_key: str,
     signatures: List[str],
     delay: float,
@@ -105,7 +107,7 @@ def fetch_transactions_with_retries(
         if not remaining:
             break
 
-        page = fetch_transactions_for_signatures(api_url, api_key, remaining)
+        page = fetch_transactions_for_signatures(rest_url, api_key, remaining)
         collected.extend(page)
 
         returned_signatures = {
@@ -126,7 +128,8 @@ def fetch_transactions_with_retries(
 
 def fetch_all_transactions(
     address: str,
-    api_url: str,
+    rpc_url: str,
+    rest_url: str,
     api_key: str,
     limit: int,
     delay: float,
@@ -136,12 +139,16 @@ def fetch_all_transactions(
     before: Optional[str] = None
 
     while True:
-        signatures, before = fetch_signatures(address, api_url, api_key, limit, before=before)
+        signatures, before = fetch_signatures(
+            address, rpc_url, api_key, limit, before=before
+        )
 
         if not signatures:
             break
 
-        transactions = fetch_transactions_with_retries(api_url, api_key, signatures, delay)
+        transactions = fetch_transactions_with_retries(
+            rest_url, api_key, signatures, delay
+        )
         all_transactions.extend(transactions)
 
         if max_transactions is not None and len(all_transactions) >= max_transactions:
@@ -183,8 +190,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-url",
-        default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_URL),
-        help="Base Helius API URL to use.",
+        default=os.environ.get("HELIUS_API_URL", DEFAULT_HELIUS_RPC_URL),
+        help="Helius RPC URL used for getSignaturesForAddress.",
+    )
+    parser.add_argument(
+        "--rest-api-url",
+        default=os.environ.get("HELIUS_REST_API_URL", DEFAULT_HELIUS_REST_URL),
+        help="Helius REST URL used for transaction lookups.",
     )
     parser.add_argument(
         "--api-key",
@@ -220,6 +232,7 @@ def main() -> None:
             payload = fetch_all_transactions(
                 address,
                 args.api_url,
+                args.rest_api_url,
                 args.api_key,
                 args.limit,
                 args.delay,
